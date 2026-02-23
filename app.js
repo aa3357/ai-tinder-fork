@@ -112,7 +112,9 @@ function renderDeck() {
     img.alt = `${p.name} — profile photo`;
     img.draggable = false;
     img.addEventListener("load", () => {
-      card.classList.remove("card--img-fallback");
+      if (img.src !== FALLBACK_IMAGE) {
+        card.classList.remove("card--img-fallback");
+      }
     });
     img.addEventListener("error", () => {
       if (img.src !== FALLBACK_IMAGE) {
