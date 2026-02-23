@@ -92,6 +92,12 @@ const ACTION_LABELS = {
   up: "SUPER",
 };
 
+const FALLBACK_IMAGE =
+  "data:image/svg+xml;charset=UTF-8," +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='1600' viewBox='0 0 1200 1600'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='%23222436'/><stop offset='100%' stop-color='%2313141f'/></linearGradient></defs><rect width='1200' height='1600' fill='url(%23g)'/><text x='50%' y='48%' text-anchor='middle' fill='%23cfd3e6' font-size='54' font-family='Segoe UI, Arial, sans-serif'>Photo unavailable</text></svg>"
+  );
+
 function renderDeck() {
   deckEl.setAttribute("aria-busy", "true");
   deckEl.innerHTML = "";
@@ -104,6 +110,17 @@ function renderDeck() {
     img.className = "card__media";
     img.src = p.img;
     img.alt = `${p.name} — profile photo`;
+    img.draggable = false;
+    img.addEventListener("load", () => {
+      card.classList.remove("card--img-fallback");
+    });
+    img.addEventListener("error", () => {
+      if (img.src !== FALLBACK_IMAGE) {
+        img.src = FALLBACK_IMAGE;
+      }
+      img.alt = `${p.name} — photo unavailable`;
+      card.classList.add("card--img-fallback");
+    });
 
     const body = document.createElement("div");
     body.className = "card__body";
@@ -145,6 +162,7 @@ function renderDeck() {
 
   deckEl.removeAttribute("aria-busy");
   bindTopCardInteractions();
+  updateControls();
 }
 
 function resetDeck() {
@@ -157,6 +175,19 @@ function resetDeck() {
 
 function getTopCard() {
   return deckEl.lastElementChild;
+}
+
+function updateControls() {
+  const hasCards = profiles.length > 0;
+  const disableDecisionButtons = !hasCards || isAnimatingOut;
+
+  [likeBtn, nopeBtn, superLikeBtn].forEach((btn) => {
+    btn.disabled = disableDecisionButtons;
+    btn.setAttribute("aria-disabled", String(disableDecisionButtons));
+  });
+
+  shuffleBtn.disabled = isAnimatingOut;
+  shuffleBtn.setAttribute("aria-disabled", String(isAnimatingOut));
 }
 
 function resetCardPosition(card) {
@@ -239,9 +270,13 @@ function animateOutCard(card, direction) {
 function performAction(direction) {
   if (isAnimatingOut) return;
   const card = getTopCard();
-  if (!card) return;
+  if (!card) {
+    updateControls();
+    return;
+  }
 
   isAnimatingOut = true;
+  updateControls();
   animateOutCard(card, direction);
 
   window.setTimeout(() => {
@@ -249,6 +284,7 @@ function performAction(direction) {
     profiles.pop();
     isAnimatingOut = false;
     bindTopCardInteractions();
+    updateControls();
   }, 280);
 }
 
@@ -266,6 +302,7 @@ function bindTopCardInteractions() {
 
 function onCardPointerDown(event) {
   if (isAnimatingOut || event.button !== 0) return;
+  event.preventDefault();
 
   const card = getTopCard();
   if (!card || card !== event.currentTarget) return;
@@ -330,7 +367,9 @@ function onCardPointerUp(event) {
       const isDoubleTap = (now - lastTap.time) <= DOUBLE_TAP_MS && withinDoubleTapDistance(event.clientX, event.clientY);
 
       if (isDoubleTap) {
+        lastTap = { time: 0, x: 0, y: 0 };
         performAction("right");
+        return;
       }
 
       lastTap = { time: now, x: event.clientX, y: event.clientY };
@@ -361,10 +400,43 @@ function onCardPointerCancel(event) {
   resetCardPosition(card);
 }
 
+function shouldIgnoreKeyTarget(target) {
+  if (!target) return false;
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+}
+
+function onKeyDown(event) {
+  if (event.defaultPrevented || shouldIgnoreKeyTarget(event.target)) return;
+
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    performAction("left");
+    return;
+  }
+
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    performAction("right");
+    return;
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    performAction("up");
+    return;
+  }
+
+  if (event.key.toLowerCase() === "r") {
+    event.preventDefault();
+    resetDeck();
+  }
+}
+
 likeBtn.addEventListener("click", () => performAction("right"));
 nopeBtn.addEventListener("click", () => performAction("left"));
 superLikeBtn.addEventListener("click", () => performAction("up"));
 shuffleBtn.addEventListener("click", resetDeck);
+document.addEventListener("keydown", onKeyDown);
 
 // Boot
 resetDeck();
