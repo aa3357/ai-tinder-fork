@@ -84,6 +84,10 @@ body {
 .ghost-btn:hover {
   border-color: rgba(255, 255, 255, 0.3);
 }
+.ghost-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .app__main {
   display: grid;
@@ -109,6 +113,11 @@ body {
   transform: translateY(0) scale(1);
   will-change: transform;
   transition: transform 220ms ease, opacity 220ms ease, filter 220ms ease;
+  touch-action: none;
+}
+
+.card.is-dragging {
+  transition: none;
 }
 
 .card:nth-child(1) { transform: translateY(0) scale(1); }
@@ -121,6 +130,66 @@ body {
   object-fit: cover;
   display: block;
   background: #222436;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.swipe-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 2;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  transform: rotate(-8deg) scale(0.95);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.swipe-badge.show {
+  transform: rotate(-8deg) scale(1);
+}
+
+.swipe-badge.right {
+  color: var(--like);
+  border-color: var(--like);
+  left: 18px;
+  right: auto;
+  transform: rotate(-8deg) scale(0.95);
+}
+
+.swipe-badge.right.show {
+  transform: rotate(-8deg) scale(1);
+}
+
+.swipe-badge.left {
+  color: var(--nope);
+  border-color: var(--nope);
+  left: auto;
+  right: 18px;
+  transform: rotate(8deg) scale(0.95);
+}
+
+.swipe-badge.left.show {
+  transform: rotate(8deg) scale(1);
+}
+
+.swipe-badge.up {
+  color: var(--super);
+  border-color: var(--super);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) scale(0.95);
+}
+
+.swipe-badge.up.show {
+  transform: translateX(-50%) scale(1);
 }
 
 .card__body {
@@ -157,6 +226,11 @@ body {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.card--img-fallback .card__media {
+  object-fit: cover;
+  filter: saturate(0.85);
+}
 .chip {
   font-size: 12px;
   color: #eaeaf2;
@@ -189,6 +263,11 @@ body {
 .ctrl--nope { background: var(--nope); }
 .ctrl--like { background: var(--like); }
 .ctrl--superlike { background: var(--super); }
+
+.ctrl:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 .note {
   color: var(--muted);

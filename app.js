@@ -77,6 +77,20 @@ const nopeBtn = document.getElementById("nopeBtn");
 const superLikeBtn = document.getElementById("superLikeBtn");
 
 let profiles = [];
+let activeDrag = null;
+let isAnimatingOut = false;
+let lastTap = { time: 0, x: 0, y: 0 };
+
+const SWIPE_X_THRESHOLD = 90;
+const SWIPE_UP_THRESHOLD = -110;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_DISTANCE = 28;
+
+const ACTION_LABELS = {
+  left: "NOPE",
+  right: "LIKE",
+  up: "SUPER",
+};
 
 const FALLBACK_IMAGE =
   "data:image/svg+xml;charset=UTF-8," +
@@ -96,6 +110,7 @@ function renderDeck() {
     img.className = "card__media";
     img.src = p.img;
     img.alt = `${p.name} — profile photo`;
+    img.draggable = false;
     img.addEventListener("load", () => {
       if (img.src !== FALLBACK_IMAGE) {
         card.classList.remove("card--img-fallback");
@@ -136,31 +151,294 @@ function renderDeck() {
     body.appendChild(meta);
     body.appendChild(chips);
 
+    const swipeBadge = document.createElement("div");
+    swipeBadge.className = "swipe-badge";
+
     card.appendChild(img);
     card.appendChild(body);
+    card.appendChild(swipeBadge);
+    card.style.zIndex = String(idx + 1);
 
     deckEl.appendChild(card);
   });
 
   deckEl.removeAttribute("aria-busy");
+  bindTopCardInteractions();
+  updateControls();
 }
 
 function resetDeck() {
   profiles = generateProfiles(12);
+  activeDrag = null;
+  isAnimatingOut = false;
+  lastTap = { time: 0, x: 0, y: 0 };
   renderDeck();
 }
 
-// Controls (intentionally not implemented)
-likeBtn.addEventListener("click", () => {
-  console.log("Like clicked.");
-});
-nopeBtn.addEventListener("click", () => {
-  console.log("Nope clicked.");
-});
-superLikeBtn.addEventListener("click", () => {
-  console.log("Super Like clicked.");
-});
+function getTopCard() {
+  return deckEl.lastElementChild;
+}
+
+function updateControls() {
+  const hasCards = profiles.length > 0;
+  const disableDecisionButtons = !hasCards || isAnimatingOut;
+
+  [likeBtn, nopeBtn, superLikeBtn].forEach((btn) => {
+    btn.disabled = disableDecisionButtons;
+    btn.setAttribute("aria-disabled", String(disableDecisionButtons));
+  });
+
+  shuffleBtn.disabled = isAnimatingOut;
+  shuffleBtn.setAttribute("aria-disabled", String(isAnimatingOut));
+}
+
+function resetCardPosition(card) {
+  card.style.transition = "transform 200ms ease";
+  card.style.transform = "translate3d(0, 0, 0) rotate(0deg)";
+  clearSwipeBadge(card);
+}
+
+function getSwipeBadge(card) {
+  return card.querySelector(".swipe-badge");
+}
+
+function clearSwipeBadge(card) {
+  const badge = getSwipeBadge(card);
+  if (!badge) return;
+  badge.classList.remove("show", "left", "right", "up");
+  badge.style.opacity = "";
+  badge.textContent = "";
+}
+
+function showSwipeBadge(card, direction, strength = 1) {
+  const badge = getSwipeBadge(card);
+  if (!badge) return;
+
+  const opacity = Math.max(0.25, Math.min(strength, 1));
+  badge.classList.remove("left", "right", "up");
+  badge.classList.add("show", direction);
+  badge.textContent = ACTION_LABELS[direction] || "";
+  badge.style.opacity = String(opacity);
+}
+
+function getDragDirection(dx, dy) {
+  const upCandidate = dy < 0 && Math.abs(dy) > Math.abs(dx) * 0.8;
+  if (upCandidate && Math.abs(dy) > 36) return "up";
+  if (dx > 36) return "right";
+  if (dx < -36) return "left";
+  return null;
+}
+
+function updateSwipeBadgeFromDrag(card, dx, dy) {
+  const direction = getDragDirection(dx, dy);
+  if (!direction) {
+    clearSwipeBadge(card);
+    return;
+  }
+
+  const strength = direction === "up"
+    ? Math.abs(dy) / Math.abs(SWIPE_UP_THRESHOLD)
+    : Math.abs(dx) / SWIPE_X_THRESHOLD;
+  showSwipeBadge(card, direction, strength);
+}
+
+function animateOutCard(card, direction) {
+  let x = 0;
+  let y = 0;
+  let rot = 0;
+
+  if (direction === "right") {
+    x = window.innerWidth * 1.1;
+    y = 20;
+    rot = 18;
+  } else if (direction === "left") {
+    x = -window.innerWidth * 1.1;
+    y = 20;
+    rot = -18;
+  } else if (direction === "up") {
+    x = 0;
+    y = -window.innerHeight * 1.1;
+    rot = 0;
+  }
+
+  showSwipeBadge(card, direction, 1);
+  card.style.transition = "transform 260ms ease, opacity 260ms ease";
+  requestAnimationFrame(() => {
+    card.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg)`;
+    card.style.opacity = "0";
+  });
+}
+
+function performAction(direction) {
+  if (isAnimatingOut) return;
+  const card = getTopCard();
+  if (!card) {
+    updateControls();
+    return;
+  }
+
+  isAnimatingOut = true;
+  updateControls();
+  animateOutCard(card, direction);
+
+  window.setTimeout(() => {
+    card.remove();
+    profiles.pop();
+    isAnimatingOut = false;
+    bindTopCardInteractions();
+    updateControls();
+  }, 280);
+}
+
+function bindTopCardInteractions() {
+  const topCard = getTopCard();
+  if (!topCard || topCard.dataset.gestureBound === "true") return;
+
+  topCard.dataset.gestureBound = "true";
+  topCard.addEventListener("pointerdown", onCardPointerDown);
+  topCard.addEventListener("pointermove", onCardPointerMove);
+  topCard.addEventListener("pointerup", onCardPointerUp);
+  topCard.addEventListener("pointercancel", onCardPointerCancel);
+  topCard.addEventListener("dblclick", onPhotoDoubleClick);
+}
+
+function onCardPointerDown(event) {
+  if (isAnimatingOut || event.button !== 0) return;
+  event.preventDefault();
+
+  const card = getTopCard();
+  if (!card || card !== event.currentTarget) return;
+
+  activeDrag = {
+    card,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+  };
+
+  card.setPointerCapture(event.pointerId);
+  card.classList.add("is-dragging");
+}
+
+function onCardPointerMove(event) {
+  if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+
+  const dx = event.clientX - activeDrag.startX;
+  const dy = event.clientY - activeDrag.startY;
+  const movedEnough = Math.hypot(dx, dy) > 8;
+
+  if (movedEnough) {
+    activeDrag.moved = true;
+  }
+
+  if (!activeDrag.moved) return;
+
+  const tilt = dx / 14;
+  activeDrag.card.style.transform = `translate3d(${dx}px, ${dy}px, 0) rotate(${tilt}deg)`;
+  updateSwipeBadgeFromDrag(activeDrag.card, dx, dy);
+}
+
+function isOnPhoto(target) {
+  return Boolean(target.closest(".card__media"));
+}
+
+function withinDoubleTapDistance(x, y) {
+  return Math.hypot(x - lastTap.x, y - lastTap.y) <= DOUBLE_TAP_DISTANCE;
+}
+
+function onPhotoDoubleClick(event) {
+  if (!isOnPhoto(event.target)) return;
+  performAction("right");
+}
+
+function onCardPointerUp(event) {
+  if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+
+  const drag = activeDrag;
+  const card = drag.card;
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+
+  card.classList.remove("is-dragging");
+  activeDrag = null;
+
+  if (!drag.moved) {
+    if (isOnPhoto(event.target)) {
+      const now = Date.now();
+      const isDoubleTap = (now - lastTap.time) <= DOUBLE_TAP_MS && withinDoubleTapDistance(event.clientX, event.clientY);
+
+      if (isDoubleTap) {
+        lastTap = { time: 0, x: 0, y: 0 };
+        performAction("right");
+        return;
+      }
+
+      lastTap = { time: now, x: event.clientX, y: event.clientY };
+    }
+    resetCardPosition(card);
+    return;
+  }
+
+  const isStrongUp = dy < SWIPE_UP_THRESHOLD && Math.abs(dy) > Math.abs(dx) * 0.8;
+
+  if (dx > SWIPE_X_THRESHOLD) {
+    performAction("right");
+  } else if (dx < -SWIPE_X_THRESHOLD) {
+    performAction("left");
+  } else if (isStrongUp) {
+    performAction("up");
+  } else {
+    resetCardPosition(card);
+  }
+}
+
+function onCardPointerCancel(event) {
+  if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+
+  const card = activeDrag.card;
+  activeDrag = null;
+  card.classList.remove("is-dragging");
+  resetCardPosition(card);
+}
+
+function shouldIgnoreKeyTarget(target) {
+  if (!target) return false;
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+}
+
+function onKeyDown(event) {
+  if (event.defaultPrevented || shouldIgnoreKeyTarget(event.target)) return;
+
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    performAction("left");
+    return;
+  }
+
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    performAction("right");
+    return;
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    performAction("up");
+    return;
+  }
+
+  if (event.key.toLowerCase() === "r") {
+    event.preventDefault();
+    resetDeck();
+  }
+}
+
+likeBtn.addEventListener("click", () => performAction("right"));
+nopeBtn.addEventListener("click", () => performAction("left"));
+superLikeBtn.addEventListener("click", () => performAction("up"));
 shuffleBtn.addEventListener("click", resetDeck);
+document.addEventListener("keydown", onKeyDown);
 
 // Boot
 resetDeck();
