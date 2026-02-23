@@ -78,6 +78,12 @@ const superLikeBtn = document.getElementById("superLikeBtn");
 
 let profiles = [];
 
+const FALLBACK_IMAGE =
+  "data:image/svg+xml;charset=UTF-8," +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='1600' viewBox='0 0 1200 1600'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='%23222436'/><stop offset='100%' stop-color='%2313141f'/></linearGradient></defs><rect width='1200' height='1600' fill='url(%23g)'/><text x='50%' y='48%' text-anchor='middle' fill='%23cfd3e6' font-size='54' font-family='Segoe UI, Arial, sans-serif'>Photo unavailable</text></svg>"
+  );
+
 function renderDeck() {
   deckEl.setAttribute("aria-busy", "true");
   deckEl.innerHTML = "";
@@ -90,6 +96,18 @@ function renderDeck() {
     img.className = "card__media";
     img.src = p.img;
     img.alt = `${p.name} — profile photo`;
+    img.addEventListener("load", () => {
+      if (img.src !== FALLBACK_IMAGE) {
+        card.classList.remove("card--img-fallback");
+      }
+    });
+    img.addEventListener("error", () => {
+      if (img.src !== FALLBACK_IMAGE) {
+        img.src = FALLBACK_IMAGE;
+      }
+      img.alt = `${p.name} — photo unavailable`;
+      card.classList.add("card--img-fallback");
+    });
 
     const body = document.createElement("div");
     body.className = "card__body";
