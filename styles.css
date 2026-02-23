@@ -223,13 +223,13 @@ body {
 
 .card__chips {
   display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .card--img-fallback .card__media {
   object-fit: cover;
   filter: saturate(0.85);
-}
-  gap: 8px;
-  flex-wrap: wrap;
 }
 .chip {
   font-size: 12px;
